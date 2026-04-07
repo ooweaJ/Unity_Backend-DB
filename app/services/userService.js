@@ -12,7 +12,7 @@ exports.login = async (username, password) => {
 // 유저 정보 반환
 exports.fetchFullUserData = async (userId) => {
     // 1. 유저 기본 정보 조회
-    const [userRows] = await db.query('SELECT id, username, gold FROM users WHERE id = ?', [userId]);
+    const [userRows] = await db.query('SELECT id, username, level, gold, gem FROM users WHERE id = ?', [userId]);
     if (userRows.length === 0) throw new Error('User not found');
 
     // 2. 캐릭터 + 조각 정보 조회
@@ -28,7 +28,9 @@ exports.fetchFullUserData = async (userId) => {
     return {
         id: userRows[0].id,
         username: userRows[0].username,
+        level: userRows[0].level,
         gold: userRows[0].gold,
+        gem: userRows[0].gem,
         characters,
         items
     };
