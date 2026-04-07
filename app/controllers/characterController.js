@@ -1,4 +1,4 @@
-const characterService = require('../services/characterService');
+const characterService = require('../services/user_characterService');
 
 exports.drawCharacter = async (req, res) => {
     const result = await characterService.drawCharacter(req.params.userId);

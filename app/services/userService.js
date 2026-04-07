@@ -1,5 +1,6 @@
 const db = require('../db');
 
+// 로그인
 exports.login = async (username, password) => {
     const [rows] = await db.query(
         'SELECT id, username, level, gold FROM users WHERE username=? AND password=?', 
@@ -8,6 +9,7 @@ exports.login = async (username, password) => {
     return rows[0] || null;
 };
 
+// 유저 정보 반환
 exports.fetchFullUserData = async (userId) => {
     // 1. 유저 기본 정보 조회
     const [userRows] = await db.query('SELECT id, username, gold FROM users WHERE id = ?', [userId]);

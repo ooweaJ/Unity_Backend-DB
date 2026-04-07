@@ -4,7 +4,7 @@ const userController = require('../controllers/userController');
 
 router.post('/login', userController.login);
 router.get('/:id', userController.getUserInfo);
-router.get("/:userId/characters", userController.getUserCharacters);
+router.post('/:userId/enhance', userController.postEnhance);
 
 module.exports = router;
 

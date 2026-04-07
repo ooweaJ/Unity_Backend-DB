@@ -131,40 +131,37 @@ async function saveAndReturn(userId, grade, reward) {
     const { type_id, reward_id } = reward;
 
     if (type_id === 1) {
-        // 캐릭터 신규 or 중복
         const [owned] = await db.query(
-            'SELECT enhance FROM user_characters WHERE user_id = ? AND character_id = ?',
+            'SELECT id FROM user_characters WHERE user_id = ? AND character_id = ?',
             [userId, reward_id]
         );
 
         if (owned.length === 0) {
-            // 신규 획득
+            // 신규 획득 → user_characters에 추가
             await db.query(
-                `INSERT INTO user_characters
-                 (user_id, character_id, level, exp, enhance)
+                `INSERT INTO user_characters (user_id, character_id, level, exp, enhance)
                  VALUES (?, ?, 1, 0, 0)`,
                 [userId, reward_id]
             );
             return { grade, typeId: type_id, rewardId: reward_id, resultType: 'character' };
 
         } else {
-            // 중복 → enhance +1 (초월)
+            // 중복 → user_character_shards amount +1
             await db.query(
-                `UPDATE user_characters
-                 SET enhance = enhance + 1
-                 WHERE user_id = ? AND character_id = ?`,
+                `INSERT INTO user_character_shards (user_id, character_id, amount)
+                 VALUES (?, ?, 1)
+                 ON DUPLICATE KEY UPDATE amount = amount + 1`,
                 [userId, reward_id]
             );
-            return { grade, typeId: type_id, rewardId: reward_id, resultType: 'enhance' };
+            return { grade, typeId: type_id, rewardId: reward_id, resultType: 'shard' };
         }
     }
 
     if (type_id === 2) {
-        // 아이템 (포션 등)
         await db.query(
-            `INSERT INTO user_items (user_id, item_id, count)
+            `INSERT INTO user_items (user_id, item_id, amount)
              VALUES (?, ?, 1)
-             ON DUPLICATE KEY UPDATE count = count + 1`,
+             ON DUPLICATE KEY UPDATE amount = amount + 1`,
             [userId, reward_id]
         );
         return { grade, typeId: type_id, rewardId: reward_id, resultType: 'item' };
