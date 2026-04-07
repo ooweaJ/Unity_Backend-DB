@@ -35,7 +35,7 @@ exports.fetchFullUserData = async (userId) => {
         WHERE uc.user_id = ?`, [userId]);
 
     // 3. 아이템 정보 조회
-    const [items] = await db.query('SELECT item_id, count FROM user_items WHERE user_id = ?', [userId]);
+    const [items] = await db.query('SELECT item_id, amount FROM user_items WHERE user_id = ?', [userId]);
 
     return {
         id: userRows[0].id,
