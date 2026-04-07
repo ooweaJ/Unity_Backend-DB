@@ -4,8 +4,8 @@ const userCharService = require('../services/user_characterService');
 // 로그인
 exports.login = async (req, res) => {
     const { username, password } = req.body;
-    const user = await userService.login(username, password);
-    if(user) res.json({ message: 'Login success', user });
+    const userData = await userService.login(username, password);
+    if(user) res.json({ message: 'Login success', userData });
     else res.json({ message: 'Login failed' });
 };
 

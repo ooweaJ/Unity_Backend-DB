@@ -2,11 +2,23 @@ const db = require('../db');
 
 // 로그인
 exports.login = async (username, password) => {
+    // 1. 최소한의 정보(id)만 조회해서 인증 여부 확인
     const [rows] = await db.query(
-        'SELECT id, username, level, gold FROM users WHERE username=? AND password=?', 
+        'SELECT id FROM users WHERE username = ? AND password = ?', 
         [username, password]
     );
-    return rows[0] || null;
+
+    if (rows.length > 0) {
+        const userId = rows[0].id;
+
+        // 2. 인증 성공! 모든 데이터 조립은 이 함수 하나에 맡깁니다.
+        // 여기서 id, username, level, gold, characters, items가 한꺼번에 조립됨
+        const fullData = await exports.fetchFullUserData(userId);
+        
+        return fullData; 
+    }
+
+    return null; // 로그인 실패
 };
 
 // 유저 정보 반환
