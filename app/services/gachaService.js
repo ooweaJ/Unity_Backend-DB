@@ -1,97 +1,174 @@
 // services/gachaService.js
-const db = require("../db");
+const db = require('../db');
 
-const DUPLICATE_SHARD_AMOUNT = 1; // 중복 시 지급 shard 수
+const GACHA_COST = 100; // 1회 비용
 
-exports.drawCharacter = async (userId) => {
-    // 1️⃣ 골드 확인
+exports.drawGacha = async (userId, bannerId, amount) => {
+
+    // ── 1. 유저 골드 확인 ─────────────────────────────
     const [userRows] = await db.query(
-        "SELECT gold FROM users WHERE id=?",
-        [userId]
+        'SELECT gold FROM users WHERE id = ?', [userId]
+    );
+    if (userRows.length === 0)
+        throw new Error('User not found');
+
+    const totalCost = GACHA_COST * amount;
+    if (userRows[0].gold < totalCost)
+        throw new Error('Not enough gold');
+
+    // ── 2. 배너 유효성 확인 (기간 체크) ──────────────
+    const [bannerRows] = await db.query(
+        `SELECT * FROM banners
+         WHERE banner_id = ?
+         AND NOW() BETWEEN start_at AND end_at`,
+        [bannerId]
+    );
+    if (bannerRows.length === 0)
+        throw new Error('Banner not found or expired');
+
+    // ── 3. 골드 차감 ──────────────────────────────────
+    await db.query(
+        'UPDATE users SET gold = gold - ? WHERE id = ?',
+        [totalCost, userId]
     );
 
-    if (userRows.length === 0)
-        return { success: false, message: "User not found" };
+    // ── 4. amount 횟수만큼 뽑기 ──────────────────────
+    const results = [];
+    for (let i = 0; i < amount; i++) {
+        const result = await pullOnce(userId, bannerId);
+        results.push(result);
+    }
 
-    if (userRows[0].gold < 100)
-        return { success: false, message: "Not enough gold" };
+    return results;
+};
 
-    // 2) 골드 차감
-    await db.query("UPDATE users SET gold = gold - 100 WHERE id=?", [userId]);
+// ── 1회 뽑기 ──────────────────────────────────────────
+async function pullOnce(userId, bannerId) {
 
-    // 3) 확률 테이블 불러오기
-    const [probs] = await db.query("SELECT * FROM gacha_probabilities");
+    // STEP 1. 확률 구성 (Base + Override)
+    const rates = await buildRates(bannerId);
 
-    const rand = Math.random() * 100;
-    let sum = 0;
-    let selectedRarity = null;
+    // STEP 2. 등급 추첨
+    const grade = rollGrade(rates);
 
-    for (let p of probs) {
-        sum += p.percent; 
-        if (rand <= sum) {
-            selectedRarity = p.rarity;
-            break;
+    // STEP 3. 보상 풀 구성 (Base + Pickup - Exclude)
+    const pool = await buildPool(bannerId, grade);
+
+    // STEP 4. 보상 선택
+    const reward = pool[Math.floor(Math.random() * pool.length)];
+
+    // STEP 5. 유저 DB에 저장 + 결과 반환
+    return await saveAndReturn(userId, grade, reward);
+}
+
+// ── 확률 구성 ──────────────────────────────────────────
+async function buildRates(bannerId) {
+    const [base] = await db.query(
+        'SELECT grade, rate FROM base_gacha_rates'
+    );
+    const [overrides] = await db.query(
+        'SELECT grade, override_rate FROM banner_tier_override WHERE banner_id = ?',
+        [bannerId]
+    );
+
+    // Base 확률 맵으로 변환
+    const rateMap = {};
+    base.forEach(r => rateMap[r.grade] = parseFloat(r.rate));
+
+    // Override 적용 (있는 등급만 덮어씌움)
+    overrides.forEach(o => rateMap[o.grade] = parseFloat(o.override_rate));
+
+    return rateMap;
+}
+
+// ── 등급 추첨 ──────────────────────────────────────────
+function rollGrade(rateMap) {
+    const rand = Math.random();
+    let cumulative = 0;
+
+    // 낮은 등급부터 (1=노말 → 4=전설)
+    for (let grade = 1; grade <= 4; grade++) {
+        cumulative += (rateMap[grade] || 0);
+        if (rand < cumulative) return grade;
+    }
+    return 1;
+}
+
+// ── 보상 풀 구성 ───────────────────────────────────────
+async function buildPool(bannerId, grade) {
+    // Base 풀 (game_characters 참조)
+    const [base] = await db.query(
+        'SELECT type_id, reward_id FROM base_reward_pool WHERE grade = ?',
+        [grade]
+    );
+
+    // Pickup 추가
+    const [pickups] = await db.query(
+        'SELECT type_id, reward_id FROM banner_pickup WHERE banner_id = ? AND grade = ?',
+        [bannerId, grade]
+    );
+
+    // Exclude 제거
+    const [excludes] = await db.query(
+        'SELECT reward_id FROM banner_exclude WHERE banner_id = ? AND grade = ?',
+        [bannerId, grade]
+    );
+    const excludeSet = new Set(excludes.map(e => e.reward_id));
+
+    const pool = [
+        ...base.filter(r => !excludeSet.has(r.reward_id)),
+        ...pickups
+    ];
+
+    if (pool.length === 0)
+        throw new Error(`Empty pool: bannerId=${bannerId} grade=${grade}`);
+
+    return pool;
+}
+
+// ── 유저 DB 저장 + 결과 반환 ───────────────────────────
+async function saveAndReturn(userId, grade, reward) {
+    const { type_id, reward_id } = reward;
+
+    if (type_id === 1) {
+        // 캐릭터 신규 or 중복
+        const [owned] = await db.query(
+            'SELECT enhance FROM user_characters WHERE user_id = ? AND character_id = ?',
+            [userId, reward_id]
+        );
+
+        if (owned.length === 0) {
+            // 신규 획득
+            await db.query(
+                `INSERT INTO user_characters
+                 (user_id, character_id, level, exp, enhance)
+                 VALUES (?, ?, 1, 0, 0)`,
+                [userId, reward_id]
+            );
+            return { grade, typeId: type_id, rewardId: reward_id, resultType: 'character' };
+
+        } else {
+            // 중복 → enhance +1 (초월)
+            await db.query(
+                `UPDATE user_characters
+                 SET enhance = enhance + 1
+                 WHERE user_id = ? AND character_id = ?`,
+                [userId, reward_id]
+            );
+            return { grade, typeId: type_id, rewardId: reward_id, resultType: 'enhance' };
         }
     }
 
-    if (!selectedRarity)
-        return { success: false, message: "Probability error" };
-
-    // 4) 해당 rarity의 캐릭터 중 하나 선택
-    const [rows] = await db.query(
-        "SELECT id FROM game_characters WHERE rarity=? ORDER BY RAND() LIMIT 1",
-        [selectedRarity]
-    );
-
-    if (rows.length === 0)
-        return { success: false, message: "No character found for rarity" };
-
-    const characterId = rows[0].id;
-
-    // 4️⃣ 이미 캐릭터 소유했는지 확인
-    const [owned] = await db.query(
-        `
-        SELECT 1 FROM user_characters
-        WHERE user_id=? AND character_id=?
-        `,
-        [userId, characterId]
-    );
-
-
-    // 5️⃣ 분기 처리
-    if (owned.length === 0) {
-        // ✅ 신규 캐릭터
+    if (type_id === 2) {
+        // 아이템 (포션 등)
         await db.query(
-            `
-            INSERT INTO user_characters
-            (user_id, character_id, level, exp, enhance)
-            VALUES (?, ?, 1, 0, 0)
-            `,
-            [userId, characterId]
+            `INSERT INTO user_items (user_id, item_id, count)
+             VALUES (?, ?, 1)
+             ON DUPLICATE KEY UPDATE count = count + 1`,
+            [userId, reward_id]
         );
-
-        return {
-            success: true,
-            resultType: "character",
-            characterId
-        };
-    } else {
-        // 🔮 중복 → shard 지급
-        await db.query(
-            `
-            INSERT INTO user_character_shards (user_id, character_id, amount)
-            VALUES (?, ?, ?)
-            ON DUPLICATE KEY UPDATE amount = amount + ?
-            `,
-            [userId, characterId, DUPLICATE_SHARD_AMOUNT, DUPLICATE_SHARD_AMOUNT]
-        );
-
-        return {
-            success: true,
-            resultType: "shard",
-            characterId,
-            shardAmount: DUPLICATE_SHARD_AMOUNT
-        };
+        return { grade, typeId: type_id, rewardId: reward_id, resultType: 'item' };
     }
-};
 
+    throw new Error(`Unknown type_id: ${type_id}`);
+}
