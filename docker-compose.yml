@@ -3,6 +3,12 @@ services:
     image: node:18
     container_name: backend
     working_dir: /app
+    environment:
+      - DB_HOST=mysql
+      - DB_USER=gameuser
+      - DB_PASSWORD=gamepass
+      - DB_NAME=game_db
+      - REDIS_HOST=redis
     volumes:
       - ./app:/app
       - node_modules:/app/node_modules
@@ -36,6 +42,14 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
+  tunnel:
+    container_name: cloudflared-tunnel
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+   
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - backend
 
 volumes:
   db_data:

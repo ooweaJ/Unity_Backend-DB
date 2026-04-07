@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const port = 3000;
 
+const pool = require('./db/index');
 const userRoutes = require('./routes/users');
 const characterRoutes = require('./routes/characters');
 const gachaRoutes = require('./routes/gacha');
