@@ -1,32 +1,37 @@
 const db = require('./db/index');
 
+async function addColumnSafe(conn, table, column, definition) {
+    try {
+        await conn.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+        console.log(`✅ ${table}.${column} 컬럼 추가 완료`);
+    } catch (err) {
+        // 에러 코드 1060: Duplicate column name (이미 컬럼이 존재함)
+        if (err.errno === 1060) {
+            console.log(`ℹ️ ${table}.${column} 컬럼이 이미 존재하여 건너뜁니다.`);
+        } else {
+            throw err;
+        }
+    }
+}
+
 async function migrate() {
     try {
         const conn = await db.getConnection();
-        console.log('🚀 DB 스키마 마이그레이션 시작...');
+        console.log('🚀 DB 스키마 마이그레이션 시작 (호환 모드)...');
 
         // 1. game_characters 수정
-        await conn.query(`ALTER TABLE game_characters 
-            ADD COLUMN IF NOT EXISTS base_max_level INT DEFAULT 30,
-            ADD COLUMN IF NOT EXISTS base_max_enhance INT DEFAULT 5,
-            ADD COLUMN IF NOT EXISTS transcend_material_id INT`);
+        await addColumnSafe(conn, 'game_characters', 'base_max_level', 'INT DEFAULT 30');
+        await addColumnSafe(conn, 'game_characters', 'base_max_enhance', 'INT DEFAULT 5');
+        await addColumnSafe(conn, 'game_characters', 'transcend_material_id', 'INT');
         
         // 2. game_items 수정
-        // MySQL 8.0.19+ supports IF NOT EXISTS for columns, but for older versions we might need a workaround.
-        // Let's use a safe approach or assume it might fail if exists.
-        try {
-            await conn.query(`ALTER TABLE game_items ADD COLUMN slot_type VARCHAR(20)`);
-        } catch(e) { /* 이미 있으면 무시 */ }
-        try {
-            await conn.query(`ALTER TABLE game_items ADD COLUMN effect_value INT DEFAULT 0`);
-        } catch(e) { /* 이미 있으면 무시 */ }
+        await addColumnSafe(conn, 'game_items', 'slot_type', 'VARCHAR(20)');
+        await addColumnSafe(conn, 'game_items', 'effect_value', 'INT DEFAULT 0');
         
         // 3. user_characters 수정
-        try {
-            await conn.query(`ALTER TABLE user_characters ADD COLUMN transcend_stage INT DEFAULT 0 AFTER enhance`);
-        } catch(e) { /* 이미 있으면 무시 */ }
+        await addColumnSafe(conn, 'user_characters', 'transcend_stage', 'INT DEFAULT 0 AFTER enhance');
 
-        // 4. equipped_items는 새로 만든 거라 initDatabase에서 이미 처리되었을 것 (혹시 모르니 다시 확인)
+        // 4. equipped_items 테이블 생성 (이미 있으면 생성 안함)
         await conn.query(`
             CREATE TABLE IF NOT EXISTS equipped_items (
                 user_id      INT NOT NULL,
@@ -38,7 +43,7 @@ async function migrate() {
             )
         `);
 
-        console.log('✅ DB 스키마 업데이트 완료!');
+        console.log('✅ 모든 DB 스키마 업데이트 완료!');
         process.exit(0);
     } catch (err) {
         console.error('❌ 마이그레이션 실패:', err);
