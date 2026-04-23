@@ -6,12 +6,14 @@ const pool = require('./db/index');
 const userRoutes = require('./routes/users');
 const gachaRoutes = require('./routes/gacha');
 const matchRoutes = require('./routes/match');
+const inventoryRoutes = require('./routes/inventory');
 
 app.use(express.json());
 
 app.use('/users', userRoutes);
 app.use('/gacha', gachaRoutes);
 app.use('/match', matchRoutes);
+app.use('/inventory', inventoryRoutes);
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);

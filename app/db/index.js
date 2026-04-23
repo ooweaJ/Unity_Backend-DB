@@ -33,7 +33,10 @@ const initDatabase = async () => {
             CREATE TABLE IF NOT EXISTS game_characters (
                 character_id INT PRIMARY KEY,
                 name         VARCHAR(50) NOT NULL,
-                grade        TINYINT     NOT NULL   -- 1=노말 2=레어 3=에픽 4=전설
+                grade        TINYINT     NOT NULL,   -- 1=노말 2=레어 3=에픽 4=전설
+                base_max_level   INT DEFAULT 30,
+                base_max_enhance INT DEFAULT 5,
+                transcend_material_id INT            -- 초월 시 필요한 아이템 ID
             )
         `);
 
@@ -43,7 +46,9 @@ const initDatabase = async () => {
                 item_id INT PRIMARY KEY,
                 name    VARCHAR(50) NOT NULL,
                 grade   TINYINT     NOT NULL,
-                type    VARCHAR(20) NOT NULL        -- 'equipment', 'consumable'
+                type    VARCHAR(20) NOT NULL,       -- 'equipment', 'exp_potion', 'enhance_mat', 'transcend_mat'
+                slot_type VARCHAR(20),              -- 'Weapon', 'Armor', 'Accessory', 'Ring'
+                effect_value INT DEFAULT 0          -- 경험치량 또는 강화 포인트
             )
         `);
 
@@ -56,8 +61,21 @@ const initDatabase = async () => {
                 level        INT     DEFAULT 1,
                 exp          INT     DEFAULT 0,
                 enhance      INT     DEFAULT 0,
+                transcend_stage INT  DEFAULT 0,     -- 초월 단계
                 obtained_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE KEY uq_user_char (user_id, character_id)
+            )
+        `);
+
+        // ── 유저 장착 아이템 ───────────────────────────────
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS equipped_items (
+                user_id      INT NOT NULL,
+                character_id INT NOT NULL,
+                slot_type    VARCHAR(20) NOT NULL,  -- 'Weapon', 'Armor', etc.
+                item_id      INT NOT NULL,
+                PRIMARY KEY (user_id, character_id, slot_type),
+                FOREIGN KEY (user_id, character_id) REFERENCES user_characters(user_id, character_id) ON DELETE CASCADE
             )
         `);
 

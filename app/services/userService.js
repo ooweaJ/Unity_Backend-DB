@@ -27,14 +27,25 @@ exports.fetchFullUserData = async (userId) => {
     const [userRows] = await db.query('SELECT id, username, level, gold, gem FROM users WHERE id = ?', [userId]);
     if (userRows.length === 0) throw new Error('User not found');
 
-    // 2. 캐릭터 + 조각 정보 조회
+    // 2. 캐릭터 + 조각 정보 조회 (초월 단계 포함)
     const [characters] = await db.query(`
-        SELECT uc.character_id, uc.level, uc.exp, uc.enhance, COALESCE(ucs.amount, 0) AS shardAmount
+        SELECT uc.character_id, uc.level, uc.exp, uc.enhance, uc.transcend_stage, 
+               COALESCE(ucs.amount, 0) AS shardAmount
         FROM user_characters uc
         LEFT JOIN user_character_shards ucs ON uc.user_id = ucs.user_id AND uc.character_id = ucs.character_id
         WHERE uc.user_id = ?`, [userId]);
 
-    // 3. 아이템 정보 조회
+    // 3. 장착 아이템 조회
+    const [equipped] = await db.query('SELECT character_id, slot_type, item_id FROM equipped_items WHERE user_id = ?', [userId]);
+
+    // 캐릭터별 장착 정보 매핑
+    characters.forEach(c => {
+        c.equipped_items = equipped
+            .filter(e => e.character_id === c.character_id)
+            .map(e => ({ slot_type: e.slot_type, item_id: e.item_id }));
+    });
+
+    // 4. 아이템 정보 조회
     const [items] = await db.query('SELECT item_id, amount FROM user_items WHERE user_id = ?', [userId]);
 
     return {
