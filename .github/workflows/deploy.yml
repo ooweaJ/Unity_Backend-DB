@@ -1,0 +1,32 @@
+name: Deploy to Server (Self-hosted)
+
+on:
+  push:
+    branches:
+      - main  # main 브랜치에 푸시될 때 실행
+
+jobs:
+  deploy:
+    # GitHub 서버가 아닌, 내 서버에 설치한 러너에서 실행한다는 뜻
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy
+        run: |
+          # 서버의 프로젝트 폴더로 이동 (경로가 다르면 수정해 주세요)
+          cd ~/backend
+          
+          # 최신 코드 가져오기
+          git pull origin main
+          
+          # 도커 빌드 및 컨테이너 재시작
+          docker compose up -d --build
+          
+          sleep 10
+          # DB 마이그레이션 실행
+          docker compose exec -T backend node migrate.js
+          
+          echo "🚀 Self-hosted Deployment successful!"
