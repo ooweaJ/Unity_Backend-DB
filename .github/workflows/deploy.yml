@@ -23,7 +23,7 @@ jobs:
           git pull origin main
           
           # 도커 빌드 및 컨테이너 재시작
-          docker compose up -d --build
+          docker compose up -d --build --force-recreate
           
           sleep 10
           # DB 마이그레이션 실행
