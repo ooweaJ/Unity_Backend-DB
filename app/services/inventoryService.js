@@ -21,7 +21,18 @@ exports.equipItem = async (userId, characterId, itemId, slotType) => {
             'SELECT type, slot_type FROM game_items WHERE item_id = ?',
             [itemId]
         );
-        if (gameItems.length === 0 || gameItems[0].type !== 'equipment' || gameItems[0].slot_type !== slotType) {
+
+        if (gameItems.length === 0) {
+            throw new Error('존재하지 않는 아이템입니다.');
+        }
+
+        const item = gameItems[0];
+        // 대소문자 무시 비교 (DB: 'equipment', 'weapon' vs Client: 'Equipment', 'Weapon')
+        const isEquipment = item.type.toLowerCase() === 'equipment';
+        const isSlotMatch = item.slot_type.toLowerCase() === slotType.toLowerCase();
+
+        if (!isEquipment || !isSlotMatch) {
+            console.log(`[Equip Error] Item:${itemId}, DB(type:${item.type}, slot:${item.slot_type}) vs Client(slot:${slotType})`);
             throw new Error('장착 가능한 아이템이 아니거나 슬롯이 일치하지 않습니다.');
         }
 
