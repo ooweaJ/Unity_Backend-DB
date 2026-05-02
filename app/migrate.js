@@ -31,7 +31,11 @@ async function migrate() {
         // 3. user_characters 수정
         await addColumnSafe(conn, 'user_characters', 'transcend_stage', 'INT DEFAULT 0 AFTER enhance');
 
-        // 4. equipped_items 테이블 생성 (이미 있으면 생성 안함)
+        // 4. users 수정 - 유저 경험치 및 선택 캐릭터
+        await addColumnSafe(conn, 'users', 'exp', 'INT DEFAULT 0 AFTER level');
+        await addColumnSafe(conn, 'users', 'selected_character_id', 'INT DEFAULT NULL AFTER gem');
+
+        // 5. equipped_items 테이블 생성 (이미 있으면 생성 안함)
         await conn.query(`
             CREATE TABLE IF NOT EXISTS equipped_items (
                 user_id      INT NOT NULL,

@@ -24,7 +24,10 @@ exports.login = async (username, password) => {
 // 유저 정보 반환
 exports.fetchFullUserData = async (userId) => {
     // 1. 유저 기본 정보 조회
-    const [userRows] = await db.query('SELECT id, username, level, gold, gem FROM users WHERE id = ?', [userId]);
+    const [userRows] = await db.query(
+        'SELECT id, username, level, exp, gold, gem, selected_character_id FROM users WHERE id = ?',
+        [userId]
+    );
     if (userRows.length === 0) throw new Error('User not found');
 
     // 2. 캐릭터 + 조각 정보 조회 (초월 단계 포함)
@@ -52,9 +55,68 @@ exports.fetchFullUserData = async (userId) => {
         id: userRows[0].id,
         username: userRows[0].username,
         level: userRows[0].level,
+        exp: userRows[0].exp,
         gold: userRows[0].gold,
         gem: userRows[0].gem,
+        selected_character_id: userRows[0].selected_character_id,
         characters,
         items
     };
+};
+
+// 레벨업에 필요한 경험치: level * 100
+const expRequired = (level) => level * 100;
+
+// 전투 승리 후 경험치 지급 및 레벨업 처리
+exports.addBattleExp = async (userId, gainedExp) => {
+    const conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    try {
+        const [rows] = await conn.query(
+            'SELECT level, exp FROM users WHERE id = ? FOR UPDATE',
+            [userId]
+        );
+        if (rows.length === 0) throw new Error('User not found');
+
+        let { level, exp } = rows[0];
+        exp += gainedExp;
+        let leveledUp = false;
+
+        // 누적 경험치가 요구량을 넘는 동안 계속 레벨업
+        while (exp >= expRequired(level)) {
+            exp -= expRequired(level);
+            level += 1;
+            leveledUp = true;
+        }
+
+        await conn.query(
+            'UPDATE users SET level = ?, exp = ? WHERE id = ?',
+            [level, exp, userId]
+        );
+
+        await conn.commit();
+        return { success: true, level, exp, leveledUp };
+    } catch (err) {
+        await conn.rollback();
+        throw err;
+    } finally {
+        conn.release();
+    }
+};
+
+// 유저가 선택한 캐릭터 저장
+exports.selectCharacter = async (userId, characterId) => {
+    // 유저가 해당 캐릭터를 보유 중인지 검증
+    const [rows] = await db.query(
+        'SELECT 1 FROM user_characters WHERE user_id = ? AND character_id = ?',
+        [userId, characterId]
+    );
+    if (rows.length === 0) throw new Error('보유하지 않은 캐릭터입니다.');
+
+    await db.query(
+        'UPDATE users SET selected_character_id = ? WHERE id = ?',
+        [characterId, userId]
+    );
+    return { success: true, selected_character_id: characterId };
 };

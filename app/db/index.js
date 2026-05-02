@@ -18,13 +18,15 @@ const initDatabase = async () => {
         // ── 유저 ───────────────────────────────────────────
         await conn.query(`
             CREATE TABLE IF NOT EXISTS users (
-                id         INT AUTO_INCREMENT PRIMARY KEY,
-                username   VARCHAR(50)  NOT NULL UNIQUE,
-                password   VARCHAR(255) NOT NULL,
-                level      INT          DEFAULT 1,
-                gold       INT          DEFAULT 1000,
-                gem        INT          DEFAULT 0,
-                created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+                id                   INT AUTO_INCREMENT PRIMARY KEY,
+                username             VARCHAR(50)  NOT NULL UNIQUE,
+                password             VARCHAR(255) NOT NULL,
+                level                INT          DEFAULT 1,
+                exp                  INT          DEFAULT 0,
+                gold                 INT          DEFAULT 1000,
+                gem                  INT          DEFAULT 0,
+                selected_character_id INT          DEFAULT NULL,
+                created_at           TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
