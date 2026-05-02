@@ -158,13 +158,29 @@ async function saveAndReturn(userId, grade, reward) {
     }
 
     if (type_id === 2) {
-        await db.query(
-            `INSERT INTO user_items (user_id, item_id, amount)
-             VALUES (?, ?, 1)
-             ON DUPLICATE KEY UPDATE amount = amount + 1`,
-            [userId, reward_id]
+        const [gameItem] = await db.query(
+            'SELECT type FROM game_items WHERE item_id = ?',
+            [reward_id]
         );
-        return { grade, typeId: type_id, rewardId: reward_id, resultType: 'item' };
+        const isEquipment = gameItem.length > 0 && gameItem[0].type === 'equipment';
+
+        if (isEquipment) {
+            // 장비는 인스턴스별로 저장 (강화 수치 별도 관리)
+            await db.query(
+                'INSERT INTO user_items_equipment (user_id, item_id, enhance) VALUES (?, ?, 0)',
+                [userId, reward_id]
+            );
+            return { grade, typeId: type_id, rewardId: reward_id, resultType: 'equipment' };
+        } else {
+            // 소모품/재료는 스택형
+            await db.query(
+                `INSERT INTO user_items (user_id, item_id, amount)
+                 VALUES (?, ?, 1)
+                 ON DUPLICATE KEY UPDATE amount = amount + 1`,
+                [userId, reward_id]
+            );
+            return { grade, typeId: type_id, rewardId: reward_id, resultType: 'item' };
+        }
     }
 
     throw new Error(`Unknown type_id: ${type_id}`);

@@ -2,8 +2,8 @@ const inventoryService = require('../services/inventoryService');
 
 exports.equipItem = async (req, res) => {
     try {
-        const { userId, characterId, itemId, slotType } = req.body;
-        const user = await inventoryService.equipItem(userId, characterId, itemId, slotType);
+        const { userId, characterId, equipInstanceId, slotType } = req.body;
+        const user = await inventoryService.equipItem(userId, characterId, equipInstanceId, slotType);
         res.json({ success: true, user });
     } catch (err) {
         console.error(err);
@@ -37,17 +37,6 @@ exports.discardItem = async (req, res) => {
     try {
         const { userId, itemId, amount } = req.body;
         const user = await inventoryService.discardItem(userId, itemId, amount);
-        res.json({ success: true, user });
-    } catch (err) {
-        console.error(err);
-        res.json({ success: false, message: err.message });
-    }
-};
-
-exports.transcendCharacter = async (req, res) => {
-    try {
-        const { userId, characterId } = req.body;
-        const user = await inventoryService.transcendCharacter(userId, characterId);
         res.json({ success: true, user });
     } catch (err) {
         console.error(err);

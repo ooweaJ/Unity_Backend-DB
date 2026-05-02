@@ -1,45 +1,64 @@
 const db = require('../db');
 
-// 캐릭터 강화
-exports.enhanceCharacter = async (userId, characterId, consumedShard) => {
-    // 1. 커넥션 가져오기 및 트랜잭션 시작
-    const connection = await db.getConnection();
-    await connection.beginTransaction();
+const MAX_TRANSCEND = 5;
+const LEVEL_BONUS_PER_STAGE = 2;
+
+// 캐릭터 초월
+// N초월에 조각 N개 소모, 100% 성공, 최대 5단계
+exports.transcendCharacter = async (userId, characterId) => {
+    const conn = await db.getConnection();
+    await conn.beginTransaction();
 
     try {
-        // [검증] 유저가 충분한 조각을 가지고 있는지 확인
-        const [shardRows] = await connection.query(
+        const [charRows] = await conn.query(`
+            SELECT uc.enhance, gc.base_max_level
+            FROM user_characters uc
+            JOIN game_characters gc ON uc.character_id = gc.character_id
+            WHERE uc.user_id = ? AND uc.character_id = ?`,
+            [userId, characterId]
+        );
+        if (charRows.length === 0) throw new Error('보유하지 않은 캐릭터입니다.');
+
+        const currentStage = charRows[0].enhance;
+        const baseMaxLevel = charRows[0].base_max_level;
+
+        if (currentStage >= MAX_TRANSCEND) throw new Error('이미 최대 초월 단계입니다.');
+
+        const nextStage = currentStage + 1;
+        const shardsRequired = nextStage;
+
+        const [shardRows] = await conn.query(
             'SELECT amount FROM user_character_shards WHERE user_id = ? AND character_id = ?',
             [userId, characterId]
         );
-
-        if (shardRows.length === 0 || shardRows[0].amount < consumedShard) {
-            throw new Error('조각이 부족합니다.');
+        const currentShards = shardRows.length > 0 ? shardRows[0].amount : 0;
+        if (currentShards < shardsRequired) {
+            throw new Error(`조각이 부족합니다. 필요: ${shardsRequired}개, 보유: ${currentShards}개`);
         }
 
-        // 2. 조각 차감 (Update Shards)
-        await connection.query(
+        await conn.query(
             'UPDATE user_character_shards SET amount = amount - ? WHERE user_id = ? AND character_id = ?',
-            [consumedShard, userId, characterId]
+            [shardsRequired, userId, characterId]
         );
 
-        // 3. 캐릭터 레벨/강화도 상승 (Update Character)
-        // 여기서는 예시로 enhance 수치를 1 올립니다.
-        await connection.query(
+        await conn.query(
             'UPDATE user_characters SET enhance = enhance + 1 WHERE user_id = ? AND character_id = ?',
             [userId, characterId]
         );
 
-        // 4. 모든 작업 성공 시 확정(Commit)
-        await connection.commit();
-        return { success: true, message: '강화 성공!' };
+        await conn.commit();
 
+        const newMaxLevel = baseMaxLevel + (nextStage * LEVEL_BONUS_PER_STAGE);
+        return {
+            success: true,
+            transcendStage: nextStage,
+            newMaxLevel,
+            shardsUsed: shardsRequired
+        };
     } catch (err) {
-        // 하나라도 실패하면 모든 작업을 되돌림(Rollback)
-        await connection.rollback();
+        await conn.rollback();
         throw err;
     } finally {
-        // 커넥션 반납
-        connection.release();
+        conn.release();
     }
 };

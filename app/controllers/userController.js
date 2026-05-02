@@ -5,11 +5,11 @@ const userCharService = require('../services/user_characterService');
 exports.login = async (req, res) => {
     const { username, password } = req.body;
     const userData = await userService.login(username, password);
-    if(userData) res.json({ message: 'Login success', userData });
+    if (userData) res.json({ message: 'Login success', userData });
     else res.json({ message: 'Login failed' });
 };
 
-// 유저 정보 얻기
+// 유저 정보 조회
 exports.getUserInfo = async (req, res) => {
     const userId = req.params.userId;
     try {
@@ -25,11 +25,9 @@ exports.getUserInfo = async (req, res) => {
 exports.postBattleResult = async (req, res) => {
     const userId = req.params.userId;
     const { gainedExp } = req.body;
-
     if (!gainedExp || gainedExp <= 0) {
         return res.json({ success: false, message: '유효하지 않은 경험치 값입니다.' });
     }
-
     try {
         const result = await userService.addBattleExp(userId, gainedExp);
         return res.json(result);
@@ -43,7 +41,6 @@ exports.postBattleResult = async (req, res) => {
 exports.postSelectCharacter = async (req, res) => {
     const userId = req.params.userId;
     const { characterId } = req.body;
-
     try {
         const result = await userService.selectCharacter(userId, characterId);
         return res.json(result);
@@ -53,13 +50,12 @@ exports.postSelectCharacter = async (req, res) => {
     }
 };
 
-// 캐릭터 강화
-exports.postEnhance = async (req, res) => {
+// 캐릭터 초월
+exports.postTranscend = async (req, res) => {
     const userId = req.params.userId;
-    const { characterId, consumedShard } = req.body;
-
+    const { characterId } = req.body;
     try {
-        const result = await userCharService.enhanceCharacter(userId, characterId, consumedShard);
+        const result = await userCharService.transcendCharacter(userId, characterId);
         return res.json(result);
     } catch (err) {
         console.error(err);
