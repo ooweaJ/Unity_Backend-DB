@@ -50,13 +50,14 @@ exports.postSelectCharacter = async (req, res) => {
     }
 };
 
-// 캐릭터 초월
+// 캐릭터 초월 — 결과 + 전체 유저 데이터 반환 (클라이언트 ApplyServerResponse 통일 포맷)
 exports.postTranscend = async (req, res) => {
     const userId = req.params.userId;
     const { characterId } = req.body;
     try {
         const result = await userCharService.transcendCharacter(userId, characterId);
-        return res.json(result);
+        const user   = await userService.fetchFullUserData(userId);
+        return res.json({ ...result, user });
     } catch (err) {
         console.error(err);
         return res.json({ success: false, message: err.message });
