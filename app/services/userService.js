@@ -50,10 +50,13 @@ exports.fetchFullUserData = async (userId) => {
             }));
     });
 
-    // 보유 장비 인스턴스 목록
+    // 보유 장비 인스턴스 목록 (장착 중인 것 제외)
     const [equipment] = await db.query(
-        'SELECT id AS equip_instance_id, item_id, enhance FROM user_items_equipment WHERE user_id = ?',
-        [userId]
+        `SELECT id AS equip_instance_id, item_id, enhance
+         FROM user_items_equipment
+         WHERE user_id = ?
+           AND id NOT IN (SELECT equip_instance_id FROM equipped_items WHERE user_id = ?)`,
+        [userId, userId]
     );
 
     // 소모품/재료 (스택형)
