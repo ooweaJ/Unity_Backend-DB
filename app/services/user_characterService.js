@@ -4,8 +4,9 @@ const MAX_TRANSCEND = 5;
 const LEVEL_BONUS_PER_STAGE = 2;
 
 // 캐릭터 초월
-// N초월에 조각 N개 소모, 100% 성공, 최대 5단계
-exports.transcendCharacter = async (userId, characterId) => {
+// shardsToUse / shardsRequired 확률 판정, 사용한 조각만 소모
+// shardsRequired = nextStage (1초월→1개, 2초월→2개, ...)
+exports.transcendCharacter = async (userId, characterId, shardsToUse) => {
     const conn = await db.getConnection();
     await conn.beginTransaction();
 
@@ -24,36 +25,48 @@ exports.transcendCharacter = async (userId, characterId) => {
 
         if (currentStage >= MAX_TRANSCEND) throw new Error('이미 최대 초월 단계입니다.');
 
-        const nextStage = currentStage + 1;
+        const nextStage      = currentStage + 1;
         const shardsRequired = nextStage;
+
+        if (!shardsToUse || shardsToUse < 1 || shardsToUse > shardsRequired) {
+            throw new Error(`투입 가능한 조각 수는 1~${shardsRequired}개입니다.`);
+        }
 
         const [shardRows] = await conn.query(
             'SELECT amount FROM user_character_shards WHERE user_id = ? AND character_id = ?',
             [userId, characterId]
         );
         const currentShards = shardRows.length > 0 ? shardRows[0].amount : 0;
-        if (currentShards < shardsRequired) {
-            throw new Error(`조각이 부족합니다. 필요: ${shardsRequired}개, 보유: ${currentShards}개`);
+        if (currentShards < shardsToUse) {
+            throw new Error(`조각이 부족합니다. 필요: ${shardsToUse}개, 보유: ${currentShards}개`);
         }
 
+        // 조각 소모 (실패해도 소모)
         await conn.query(
             'UPDATE user_character_shards SET amount = amount - ? WHERE user_id = ? AND character_id = ?',
-            [shardsRequired, userId, characterId]
+            [shardsToUse, userId, characterId]
         );
 
-        await conn.query(
-            'UPDATE user_characters SET enhance = enhance + 1 WHERE user_id = ? AND character_id = ?',
-            [userId, characterId]
-        );
+        // 확률 판정
+        const successRate     = shardsToUse / shardsRequired;
+        const transcendSuccess = Math.random() < successRate;
+
+        if (transcendSuccess) {
+            await conn.query(
+                'UPDATE user_characters SET enhance = enhance + 1 WHERE user_id = ? AND character_id = ?',
+                [userId, characterId]
+            );
+        }
 
         await conn.commit();
 
-        const newMaxLevel = baseMaxLevel + (nextStage * LEVEL_BONUS_PER_STAGE);
+        const resultStage = transcendSuccess ? nextStage : currentStage;
         return {
             success: true,
-            transcendStage: nextStage,
-            newMaxLevel,
-            shardsUsed: shardsRequired
+            transcendSuccess,
+            transcendStage: resultStage,
+            newMaxLevel: baseMaxLevel + (resultStage * LEVEL_BONUS_PER_STAGE),
+            shardsUsed: shardsToUse
         };
     } catch (err) {
         await conn.rollback();
