@@ -2,6 +2,35 @@ const db = require('../db');
 
 const MAX_ENHANCE = 8;
 
+// 강화 미리보기 — 골드 소모 없이 비용·확률만 반환
+exports.getEnhancePreview = async (userId, equipInstanceId) => {
+    const [instanceRows] = await db.query(
+        'SELECT enhance FROM user_items_equipment WHERE id = ? AND user_id = ?',
+        [equipInstanceId, userId]
+    );
+    if (instanceRows.length === 0) throw new Error('보유하지 않은 장비입니다.');
+
+    const currentEnhance = instanceRows[0].enhance;
+    if (currentEnhance >= MAX_ENHANCE) {
+        return { success: true, maxEnhance: true, currentEnhance };
+    }
+
+    const [rateRows] = await db.query(
+        'SELECT success_rate, gold_cost FROM equipment_enhance_rates WHERE from_enhance = ?',
+        [currentEnhance]
+    );
+    if (rateRows.length === 0) throw new Error('강화 정보를 찾을 수 없습니다.');
+
+    const { success_rate, gold_cost } = rateRows[0];
+    return {
+        success: true,
+        maxEnhance: false,
+        currentEnhance,
+        successRate: success_rate,
+        goldCost: gold_cost
+    };
+};
+
 // 장비 강화
 // 골드 소모 + 확률, 실패 시 골드만 소비 (강화 수치 유지)
 exports.enhanceEquipment = async (userId, equipInstanceId) => {
