@@ -25,8 +25,8 @@ exports.unequipItem = async (req, res) => {
 exports.useItem = async (req, res) => {
     try {
         const { userId, itemId, characterId } = req.body;
-        const user = await inventoryService.useItem(userId, itemId, characterId);
-        res.json({ success: true, user });
+        const { user, message, leveledUp } = await inventoryService.useItem(userId, itemId, characterId);
+        res.json({ success: true, message, leveledUp, user });
     } catch (err) {
         console.error(err);
         res.json({ success: false, message: err.message });

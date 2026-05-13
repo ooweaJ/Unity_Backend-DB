@@ -98,6 +98,38 @@ async function migrate() {
         `);
         console.log('✅ equipment_enhance_rates 준비 완료');
 
+        // ── 8. item_effects 테이블 생성 ──────────────────
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS item_effects (
+                id           INT AUTO_INCREMENT PRIMARY KEY,
+                effect_type  VARCHAR(50)  NOT NULL,
+                effect_value INT          NOT NULL DEFAULT 0,
+                description  VARCHAR(200)
+            )
+        `);
+        console.log('✅ item_effects 테이블 준비 완료');
+
+        // 기존 game_items의 type/effect_value → item_effects로 이관
+        await conn.query(`
+            INSERT IGNORE INTO item_effects (effect_type, effect_value)
+            SELECT DISTINCT type, effect_value
+            FROM game_items
+            WHERE type IS NOT NULL AND type != ''
+        `);
+        console.log('✅ item_effects 데이터 이관 완료');
+
+        // game_items에 effect_id FK 컬럼 추가
+        await addColumnSafe(conn, 'game_items', 'effect_id', 'INT NULL');
+
+        // type + effect_value 기준으로 effect_id 매핑
+        await conn.query(`
+            UPDATE game_items gi
+            JOIN item_effects ie ON gi.type = ie.effect_type AND gi.effect_value = ie.effect_value
+            SET gi.effect_id = ie.id
+            WHERE gi.type IS NOT NULL
+        `);
+        console.log('✅ game_items.effect_id 매핑 완료');
+
         console.log('✅ 모든 DB 스키마 업데이트 완료!');
         process.exit(0);
     } catch (err) {

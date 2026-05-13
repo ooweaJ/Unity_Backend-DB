@@ -67,7 +67,12 @@ exports.unequipItem = async (userId, characterId, slotType) => {
     }
 };
 
-// 아이템 사용 (exp_potion만 지원)
+// 레벨별 필요 경험치 (레벨 N → N+1에 필요한 exp)
+function expRequiredForLevel(level) {
+    return level * 100;
+}
+
+// 아이템 사용
 exports.useItem = async (userId, itemId, characterId) => {
     const conn = await db.getConnection();
     await conn.beginTransaction();
@@ -78,12 +83,16 @@ exports.useItem = async (userId, itemId, characterId) => {
         );
         if (itemRows.length === 0 || itemRows[0].amount <= 0) throw new Error('아이템이 없습니다.');
 
-        const [gameItems] = await conn.query(
-            'SELECT type, effect_value FROM game_items WHERE item_id = ?',
+        // item_effects JOIN으로 효과 조회
+        const [gameItems] = await conn.query(`
+            SELECT ie.effect_type, ie.effect_value
+            FROM game_items gi
+            JOIN item_effects ie ON gi.effect_id = ie.id
+            WHERE gi.item_id = ?`,
             [itemId]
         );
-        if (gameItems.length === 0) throw new Error('존재하지 않는 아이템입니다.');
-        const item = gameItems[0];
+        if (gameItems.length === 0) throw new Error('사용 가능한 효과가 없는 아이템입니다.');
+        const { effect_type, effect_value } = gameItems[0];
 
         const [charRows] = await conn.query(`
             SELECT uc.level, uc.exp, uc.enhance, gc.base_max_level
@@ -95,24 +104,34 @@ exports.useItem = async (userId, itemId, characterId) => {
         if (charRows.length === 0) throw new Error('캐릭터를 찾을 수 없습니다.');
         const char = charRows[0];
 
-        // 실제 최대 레벨 = base + (초월 단계 × 2)
         const currentMaxLevel = char.base_max_level + (char.enhance * LEVEL_BONUS_PER_TRANSCEND);
+        let message = '';
+        let leveledUp = false;
 
-        if (item.type !== 'exp_potion') throw new Error('사용 가능한 아이템 타입이 아닙니다.');
-        if (char.level >= currentMaxLevel) throw new Error('이미 현재 초월 단계의 최대 레벨입니다.');
+        if (effect_type === 'exp_gain') {
+            if (char.level >= currentMaxLevel) throw new Error('이미 현재 초월 단계의 최대 레벨입니다.');
 
-        let newExp = char.exp + item.effect_value;
-        let newLevel = char.level;
+            let newExp   = char.exp + effect_value;
+            let newLevel = char.level;
 
-        while (newExp >= 100 && newLevel < currentMaxLevel) {
-            newExp -= 100;
-            newLevel++;
+            while (newLevel < currentMaxLevel && newExp >= expRequiredForLevel(newLevel)) {
+                newExp -= expRequiredForLevel(newLevel);
+                newLevel++;
+            }
+            if (newLevel >= currentMaxLevel) newExp = 0;
+
+            leveledUp = newLevel > char.level;
+            message   = leveledUp
+                ? `레벨 업! (${char.level} → ${newLevel})`
+                : `EXP +${effect_value}`;
+
+            await conn.query(
+                'UPDATE user_characters SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?',
+                [newLevel, newExp, userId, characterId]
+            );
+        } else {
+            throw new Error(`지원하지 않는 아이템 효과입니다: ${effect_type}`);
         }
-
-        await conn.query(
-            'UPDATE user_characters SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?',
-            [newLevel, newExp, userId, characterId]
-        );
 
         await conn.query(
             'UPDATE user_items SET amount = amount - 1 WHERE user_id = ? AND item_id = ?',
@@ -124,7 +143,8 @@ exports.useItem = async (userId, itemId, characterId) => {
         );
 
         await conn.commit();
-        return await userService.fetchFullUserData(userId);
+        const user = await userService.fetchFullUserData(userId);
+        return { user, message, leveledUp };
     } catch (err) {
         await conn.rollback();
         throw err;
