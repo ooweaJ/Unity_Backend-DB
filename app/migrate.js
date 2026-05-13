@@ -31,7 +31,6 @@ async function renameColumnSafe(conn, table, oldCol, newCol, definition) {
         await conn.query(`ALTER TABLE ${table} CHANGE ${oldCol} ${newCol} ${definition}`);
         console.log(`✅ ${table}.${oldCol} → ${newCol} 변경 완료`);
     } catch (err) {
-        // 1054: Unknown column (이미 바뀐 경우)
         if (err.errno === 1054) {
             console.log(`ℹ️  ${table}.${oldCol} 없음 — 건너뜀`);
         } else {
@@ -52,14 +51,13 @@ async function migrate() {
         // ── 2. game_characters 정리 ───────────────────────
         await addColumnSafe(conn, 'game_characters', 'base_max_level', 'INT DEFAULT 30');
         await addColumnSafe(conn, 'game_characters', 'transcend_material_id', 'INT');
-        // base_max_enhance는 더 이상 사용하지 않으나 데이터 보존을 위해 유지
 
         // ── 3. game_items 정리 ────────────────────────────
         await addColumnSafe(conn, 'game_items', 'slot_type', 'VARCHAR(20)');
         await addColumnSafe(conn, 'game_items', 'effect_value', 'INT DEFAULT 0');
+        await addColumnSafe(conn, 'game_items', 'effect_id', 'INT NULL');
 
         // ── 4. user_characters: transcend_stage 제거 ─────
-        // enhance 컬럼이 초월 단계를 담당하므로 transcend_stage는 중복
         await dropColumnSafe(conn, 'user_characters', 'transcend_stage');
 
         // ── 5. user_items_equipment 테이블 생성 ──────────
@@ -98,42 +96,29 @@ async function migrate() {
         `);
         console.log('✅ equipment_enhance_rates 준비 완료');
 
-        // ── 8. item_effects 테이블 생성 ──────────────────
+        // ── 8. item_effects: 타입 정의만 (값은 game_items에) ──
+        await conn.query(`DROP TABLE IF EXISTS item_effects`);
         await conn.query(`
-            CREATE TABLE IF NOT EXISTS item_effects (
-                id           INT AUTO_INCREMENT PRIMARY KEY,
-                effect_type  VARCHAR(50)  NOT NULL,
-                effect_value INT          NOT NULL DEFAULT 0,
-                description  VARCHAR(200)
+            CREATE TABLE item_effects (
+                id          INT AUTO_INCREMENT PRIMARY KEY,
+                effect_type VARCHAR(50) NOT NULL UNIQUE,
+                description VARCHAR(200)
             )
         `);
-        console.log('✅ item_effects 테이블 준비 완료');
+        console.log('✅ item_effects 테이블 생성 완료');
 
-        // 기존 game_items의 type/effect_value → item_effects로 이관
         await conn.query(`
-            INSERT IGNORE INTO item_effects (effect_type, effect_value)
-            SELECT DISTINCT type, effect_value
-            FROM game_items
-            WHERE type IS NOT NULL AND type != ''
+            INSERT IGNORE INTO item_effects (effect_type, description) VALUES
+            ('exp_gain', '캐릭터 경험치 획득')
         `);
-        console.log('✅ item_effects 데이터 이관 완료');
+        console.log('✅ item_effects 타입 등록 완료');
 
-        // game_items에 effect_id FK 컬럼 추가
-        await addColumnSafe(conn, 'game_items', 'effect_id', 'INT NULL');
-
-        // 구 type명 → effect_type명 정규화
-        await conn.query(`
-            UPDATE item_effects SET effect_type = 'exp_gain'
-            WHERE effect_type IN ('exp_potion', 'Exp', 'exp')
-        `);
-        console.log('✅ item_effects effect_type 정규화 완료');
-
-        // effect_id 매핑 (기존 type 컬럼과 무관하게 effect_value 기준)
+        // game_items.type 기준으로 effect_id 매핑
         await conn.query(`
             UPDATE game_items gi
-            JOIN item_effects ie ON gi.effect_value = ie.effect_value
+            JOIN item_effects ie ON ie.effect_type = 'exp_gain'
             SET gi.effect_id = ie.id
-            WHERE ie.effect_type = 'exp_gain'
+            WHERE gi.type IN ('Exp', 'exp', 'exp_potion', 'exp_gain')
         `);
         console.log('✅ game_items.effect_id 매핑 완료');
 

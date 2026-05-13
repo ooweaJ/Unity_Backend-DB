@@ -83,9 +83,9 @@ exports.useItem = async (userId, itemId, characterId) => {
         );
         if (itemRows.length === 0 || itemRows[0].amount <= 0) throw new Error('아이템이 없습니다.');
 
-        // item_effects JOIN으로 효과 조회
+        // 아이템 효과 타입(item_effects)과 수치(game_items) 조회
         const [gameItems] = await conn.query(`
-            SELECT ie.effect_type, ie.effect_value
+            SELECT gi.effect_value, ie.effect_type
             FROM game_items gi
             JOIN item_effects ie ON gi.effect_id = ie.id
             WHERE gi.item_id = ?`,
