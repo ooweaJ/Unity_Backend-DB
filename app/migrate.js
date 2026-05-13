@@ -121,18 +121,19 @@ async function migrate() {
         // game_items에 effect_id FK 컬럼 추가
         await addColumnSafe(conn, 'game_items', 'effect_id', 'INT NULL');
 
-        // 구 type명 → effect_type명 정규화 (exp_potion → exp_gain)
+        // 구 type명 → effect_type명 정규화
         await conn.query(`
-            UPDATE item_effects SET effect_type = 'exp_gain' WHERE effect_type = 'exp_potion'
+            UPDATE item_effects SET effect_type = 'exp_gain'
+            WHERE effect_type IN ('exp_potion', 'Exp', 'exp')
         `);
         console.log('✅ item_effects effect_type 정규화 완료');
 
-        // type + effect_value 기준으로 effect_id 매핑
+        // effect_id 매핑 (기존 type 컬럼과 무관하게 effect_value 기준)
         await conn.query(`
             UPDATE game_items gi
             JOIN item_effects ie ON gi.effect_value = ie.effect_value
-                AND ie.effect_type = 'exp_gain' AND gi.type = 'exp_potion'
             SET gi.effect_id = ie.id
+            WHERE ie.effect_type = 'exp_gain'
         `);
         console.log('✅ game_items.effect_id 매핑 완료');
 
