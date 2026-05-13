@@ -30,7 +30,8 @@ exports.postBattleResult = async (req, res) => {
     }
     try {
         const result = await userService.addBattleExp(userId, gainedExp);
-        return res.json(result);
+        const user   = await userService.fetchFullUserData(userId);
+        return res.json({ ...result, user });
     } catch (err) {
         console.error(err);
         return res.json({ success: false, message: err.message });
