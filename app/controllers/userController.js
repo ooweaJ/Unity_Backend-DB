@@ -1,6 +1,21 @@
 const userService = require('../services/userService');
 const userCharService = require('../services/user_characterService');
 
+// 회원가입
+exports.register = async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.json({ success: false, message: '아이디와 비밀번호를 입력해주세요.' });
+    }
+    try {
+        const result = await userService.register(username, password);
+        return res.json(result);
+    } catch (err) {
+        console.error(err);
+        return res.json({ success: false, message: err.message });
+    }
+};
+
 // 로그인
 exports.login = async (req, res) => {
     const { username, password } = req.body;

@@ -1,5 +1,39 @@
 const db = require('../db');
 
+// 회원가입 — 기본 골드 1000, starter 캐릭터(character_id=2) 지급
+exports.register = async (username, password) => {
+    const conn = await db.getConnection();
+    await conn.beginTransaction();
+    try {
+        const [existing] = await conn.query(
+            'SELECT id FROM users WHERE username = ?',
+            [username]
+        );
+        if (existing.length > 0) throw new Error('이미 사용중인 아이디입니다.');
+
+        const [result] = await conn.query(
+            `INSERT INTO users (username, password, level, exp, gold, gem, selected_character_id)
+             VALUES (?, ?, 1, 0, 1000, 0, 2)`,
+            [username, password]
+        );
+        const userId = result.insertId;
+
+        await conn.query(
+            `INSERT INTO user_characters (user_id, character_id, level, exp, enhance)
+             VALUES (?, 2, 1, 0, 0)`,
+            [userId]
+        );
+
+        await conn.commit();
+        return { success: true };
+    } catch (err) {
+        await conn.rollback();
+        throw err;
+    } finally {
+        conn.release();
+    }
+};
+
 // 로그인
 exports.login = async (username, password) => {
     const [rows] = await db.query(
