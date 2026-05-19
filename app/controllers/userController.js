@@ -36,15 +36,15 @@ exports.getUserInfo = async (req, res) => {
     }
 };
 
-// 전투 승리 후 경험치 지급
+// 전투 종료 후 경험치 + 골드 지급
 exports.postBattleResult = async (req, res) => {
     const userId = req.params.userId;
-    const { gainedExp } = req.body;
+    const { gainedExp, gainedGold = 0 } = req.body;
     if (!gainedExp || gainedExp <= 0) {
         return res.json({ success: false, message: '유효하지 않은 경험치 값입니다.' });
     }
     try {
-        const result = await userService.addBattleExp(userId, gainedExp);
+        const result = await userService.addBattleExp(userId, gainedExp, gainedGold);
         const user   = await userService.fetchFullUserData(userId);
         return res.json({ ...result, user });
     } catch (err) {

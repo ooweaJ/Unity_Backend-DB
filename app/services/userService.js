@@ -116,19 +116,20 @@ exports.fetchFullUserData = async (userId) => {
 // 레벨업에 필요한 경험치: level * 100
 const expRequired = (level) => level * 100;
 
-// 전투 승리 후 경험치 지급 및 레벨업
-exports.addBattleExp = async (userId, gainedExp) => {
+// 전투 종료 후 경험치 + 골드 지급 및 레벨업
+exports.addBattleExp = async (userId, gainedExp, gainedGold = 0) => {
     const conn = await db.getConnection();
     await conn.beginTransaction();
     try {
         const [rows] = await conn.query(
-            'SELECT level, exp FROM users WHERE id = ? FOR UPDATE',
+            'SELECT level, exp, gold FROM users WHERE id = ? FOR UPDATE',
             [userId]
         );
         if (rows.length === 0) throw new Error('User not found');
 
-        let { level, exp } = rows[0];
-        exp += gainedExp;
+        let { level, exp, gold } = rows[0];
+        exp  += gainedExp;
+        gold += gainedGold;
         let leveledUp = false;
 
         while (exp >= expRequired(level)) {
@@ -138,12 +139,12 @@ exports.addBattleExp = async (userId, gainedExp) => {
         }
 
         await conn.query(
-            'UPDATE users SET level = ?, exp = ? WHERE id = ?',
-            [level, exp, userId]
+            'UPDATE users SET level = ?, exp = ?, gold = ? WHERE id = ?',
+            [level, exp, gold, userId]
         );
 
         await conn.commit();
-        return { success: true, level, exp, leveledUp };
+        return { success: true, level, exp, gold, leveledUp };
     } catch (err) {
         await conn.rollback();
         throw err;
