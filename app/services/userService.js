@@ -13,14 +13,14 @@ exports.register = async (username, password) => {
 
         const [result] = await conn.query(
             `INSERT INTO users (username, password, level, exp, gold, gem, selected_character_id)
-             VALUES (?, ?, 1, 0, 1000, 0, 2)`,
+             VALUES (?, ?, 1, 0, 1000, 0, 3)`,
             [username, password]
         );
         const userId = result.insertId;
 
         await conn.query(
             `INSERT INTO user_characters (user_id, character_id, level, exp, enhance)
-             VALUES (?, 2, 1, 0, 0)`,
+             VALUES (?, 3, 1, 0, 0)`,
             [userId]
         );
 
